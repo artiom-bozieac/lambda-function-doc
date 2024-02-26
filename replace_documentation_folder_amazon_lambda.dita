@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="replace_documentation_folder_amazon_lambda">
+    <title>How to Replace a Documentation Folder on Amazon S3 using AWS Lambda Functions</title>
+    <body>
+        <p>In order to use the uploaded output to Amazon S3 to host it and replace the current
+            documentation folder you have to use the Amazon Lambda Functions. </p>
+        <p><b>Prerequisites</b></p>
+        <p>
+            <ul id="ul_n2h_vbg_41c">
+                <li>Amazon Role that has the AWS Lambda Basic Execution Role and S3 Full Access
+                    policies.   <image href="role_policies.png" id="image_scv_1cg_41c"/></li>
+            </ul>
+        </p>
+        <p>
+            <ol id="ol_a2d_3bg_41c">
+                <li>Go to the AWS Lambda and create a new function.<note id="note_c4z_lbg_41c">Your
+                        Lambda function and the bucket where the documentation is stored should be
+                        in the same region.</note></li>
+                <li>Give a name to your function, select the latest version of Python runtime and
+                    your beforehand created role.  <image href="lambda_config.png"
+                        id="image_axh_hcg_41c"/></li>
+                <li>In the <b>Code</b> section of the function paste that code into the
+                        <b>lambda_function.py</b>
+                        file.<codeblock id="codeblock_tds_xdg_41c" outputclass="language-python">import zipfile
+import urllib.parse
+from io import BytesIO
+from mimetypes import guess_type
+import boto3
+
+s3 = boto3.client('s3')
+
+# Target path to unzip the archive.
+TARGET_PATH = ""
+
+def lambda_handler(event, context):
+    # Bucket's name.
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    
+    # Zip file's name.
+    zip_key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'])
+
+    try:
+        # Get the zipfile from S3 request.
+        obj = s3.get_object(Bucket=bucket, Key=zip_key)
+        z = zipfile.ZipFile(BytesIO(obj['Body'].read()))
+
+        # Extract and upload each file to the bucket.
+        for filename in z.namelist():
+            s3.upload_fileobj(
+                Fileobj=z.open(filename),
+                Bucket=bucket,
+                Key=TARGET_PATH + filename,
+            )
+        
+        # Delete the archive after extraction.
+        s3.delete_object(Bucket=bucket, Key=zip_key)
+    except Exception as error:
+        print(f"An error occurred {error=}")</codeblock><note
+                        id="note_rpt_ydg_41c">If you wish to specify a custom target path then
+                        modify the <b>TARGET_PATH</b> variable. For example, if you wish to unzip
+                        the archive into the <b>Documentation</b> folder then set the variable to:
+                            <codeph>TARGET_PATH = "Documentation/</codeph>.</note></li>
+                <li>Click the <b>Deploy</b> button to save your changes.</li>
+                <li>Go to the configuration tab of the Lambda function. <image
+                        href="configuration_tab.png" id="image_ctq_m2g_41c"/></li>
+                <li>Press the <b>Edit</b> button of the <b>General Configuration</b>.</li>
+                <li>Set the timeout to 15 minutes 0 seconds.<note id="note_amd_p2g_41c">If you don't
+                        do that, your Lambda function may get timed out and the zip will not be
+                        unzipped/deleted.</note></li>
+                <li>Click <b>Save</b> button.</li>
+                <li>In the <b>Function overview</b> section click the <b>Add Trigger</b> button.
+                        <image href="add_trigger.png" id="image_qss_x2g_41c"/></li>
+                <li>As a <b>Source Trigger</b> select <b>S3</b>.</li>
+                <li>Select your desired bucket.</li>
+                <li>Select <b>All object create events</b> for <b>Event Types</b>.</li>
+                <li>In the <b>Suffix</b> field type <b>.zip</b> so that the Lambda function will
+                    trigger only for <b>.zip</b> files.  <image href="trigger_config.png"
+                        id="image_qfk_jfg_41c"/></li>
+                <li>Click <b>Add</b>.</li>
+            </ol>
+        </p>
+        <p>That's everything you have to do in order to create an AWS Lambda Function that will
+            trigger everytime a <b>.zip</b> file is uploaded, unzip it and replace the files in a
+            target directory.</p>
+    </body>
+</topic>
